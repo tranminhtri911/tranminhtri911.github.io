@@ -708,6 +708,40 @@
         font-weight: 600;
         margin-bottom: 16px;
       }
+
+      /* ─── Nearby scan screen ─── */
+      .nearby-sender {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        width: 100%;
+        text-align: left;
+      }
+      .nearby-sender:hover {
+        border-color: var(--accent);
+        background: rgba(99, 102, 241, 0.06);
+      }
+      .nearby-sender-icon {
+        font-size: 18px;
+      }
+      .nearby-sender-info {
+        flex: 1;
+      }
+      .nearby-sender-name {
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .nearby-sender-sub {
+        font-size: 10px;
+        color: var(--text3);
+      }
     </style>
   </head>
   <body>
@@ -730,6 +764,21 @@
           </svg>
           Send
         </button>
+        <button class="mode-tab" id="tab-scan" onclick="switchMode('scan')">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+            <path d="M11 8v6M8 11h6" />
+          </svg>
+          Scan
+        </button>
         <button
           class="mode-tab active"
           id="tab-receive"
@@ -748,6 +797,61 @@
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
           Receive
+        </button>
+      </div>
+
+      <!-- ═══ SCAN SCREEN ═══ -->
+      <div id="screen-scan" class="hidden">
+        <h1>Scan Nearby</h1>
+        <p class="subtitle">Find senders on the same network automatically.</p>
+
+        <div id="scan-radar-screen">
+          <div class="scan-radar"><div class="scan-radar-center">📡</div></div>
+          <div
+            style="
+              text-align: center;
+              font-size: 12px;
+              color: var(--text2);
+              font-weight: 600;
+              margin-bottom: 16px;
+            "
+            id="scan-status-text"
+          >
+            Scanning...
+          </div>
+        </div>
+
+        <div id="scan-found-list"></div>
+
+        <div
+          id="scan-empty"
+          class="hidden"
+          style="text-align: center; padding: 16px 0"
+        >
+          <div style="font-size: 28px; margin-bottom: 8px">🔍</div>
+          <div style="font-size: 13px; font-weight: 700; margin-bottom: 4px">
+            No senders found
+          </div>
+          <div
+            style="font-size: 11px; color: var(--text2); margin-bottom: 16px"
+          >
+            Make sure the sender has started a session in the extension
+          </div>
+          <button
+            class="btn"
+            onclick="startNearbyScan()"
+            style="max-width: 200px; margin: 0 auto"
+          >
+            🔄 Scan Again
+          </button>
+        </div>
+
+        <button
+          class="btn btn-ghost"
+          onclick="switchMode('receive')"
+          style="margin-top: 12px"
+        >
+          Enter PIN manually
         </button>
       </div>
 
@@ -1177,19 +1281,153 @@
           .getElementById('tab-send')
           .classList.toggle('active', mode === 'send');
         document
+          .getElementById('tab-scan')
+          .classList.toggle('active', mode === 'scan');
+        document
           .getElementById('tab-receive')
           .classList.toggle('active', mode === 'receive');
         document
           .getElementById('screen-send')
           .classList.toggle('hidden', mode !== 'send');
         document
+          .getElementById('screen-scan')
+          .classList.toggle('hidden', mode !== 'scan');
+        document
           .getElementById('screen-pin')
           .classList.toggle('hidden', mode !== 'receive');
         document.getElementById('screen-receive').classList.add('hidden');
+        if (mode === 'scan') startNearbyScan();
       }
       // Auto-detect mode from URL
       const urlMode = new URLSearchParams(location.search).get('mode');
       if (urlMode === 'send') switchMode('send');
+      else if (urlMode === 'scan') switchMode('scan');
+
+      // ─── Nearby Scan logic ───
+      let scanProber = null;
+      let scanFoundPins = new Set();
+
+      function startNearbyScan() {
+        scanFoundPins = new Set();
+        document.getElementById('scan-found-list').innerHTML = '';
+        document.getElementById('scan-empty').classList.add('hidden');
+        document.getElementById('scan-radar-screen').style.display = '';
+        document.getElementById('scan-status-text').textContent = 'Scanning...';
+
+        if (scanProber) {
+          try {
+            scanProber.destroy();
+          } catch (_) {}
+          scanProber = null;
+        }
+
+        const timeKey = Math.floor(Date.now() / 300000);
+        const slotIds = [];
+        for (const key of [timeKey, timeKey - 1]) {
+          for (let n = 0; n <= 9; n++) slotIds.push(`devkit-slot-${key}-${n}`);
+        }
+
+        const proberId =
+          'devkit-prober-' + Math.random().toString(36).slice(2, 9);
+        const prober = new Peer(proberId, {
+          config: { iceServers: ICE_SERVERS },
+        });
+        scanProber = prober;
+        let remaining = slotIds.length;
+
+        function onAllDone() {
+          if (remaining > 0) return;
+          prober.destroy();
+          scanProber = null;
+          document.getElementById('scan-radar-screen').style.display = 'none';
+          if (scanFoundPins.size === 0)
+            document.getElementById('scan-empty').classList.remove('hidden');
+          else
+            document.getElementById('scan-status-text').textContent =
+              scanFoundPins.size + ' sender(s) found';
+        }
+
+        prober.on('open', () => {
+          for (const slotId of slotIds) {
+            const conn = prober.connect(slotId, {
+              reliable: false,
+              serialization: 'json',
+            });
+            const t = setTimeout(() => {
+              remaining--;
+              onAllDone();
+            }, 4000);
+            conn.on('data', (data) => {
+              clearTimeout(t);
+              remaining--;
+              if (data.kind === 'announce' && !scanFoundPins.has(data.pin)) {
+                scanFoundPins.add(data.pin);
+                addNearbySender(data.pin, data.deviceName, data.platform);
+              }
+              onAllDone();
+            });
+            conn.on('error', () => {
+              clearTimeout(t);
+              remaining--;
+              onAllDone();
+            });
+          }
+        });
+        prober.on('error', () => {
+          prober.destroy();
+          scanProber = null;
+          document.getElementById('scan-radar-screen').style.display = 'none';
+          document.getElementById('scan-empty').classList.remove('hidden');
+        });
+        setTimeout(() => {
+          if (scanProber) {
+            prober.destroy();
+            scanProber = null;
+            onAllDone();
+            remaining = 0;
+          }
+        }, 12000);
+      }
+
+      function addNearbySender(pin, deviceName, platform) {
+        const icon = ['iOS', 'Android', 'iPadOS'].includes(platform)
+          ? '📱'
+          : platform === 'extension'
+            ? '🖥️'
+            : '💻';
+        const btn = document.createElement('button');
+        btn.className = 'nearby-sender';
+        btn.innerHTML = `
+          <span class="nearby-sender-icon">${icon}</span>
+          <div class="nearby-sender-info">
+            <div class="nearby-sender-name">${deviceName}</div>
+            <div class="nearby-sender-sub">${platform} &middot; PIN ${pin}</div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+          </svg>
+        `;
+        btn.onclick = () => connectFromScan(pin);
+        document.getElementById('scan-found-list').appendChild(btn);
+      }
+
+      function connectFromScan(pin) {
+        if (scanProber) {
+          try {
+            scanProber.destroy();
+          } catch (_) {}
+          scanProber = null;
+        }
+        // Fill PIN digits and switch to receive mode
+        pin.split('').forEach((c, i) => {
+          digits[i].value = c;
+        });
+        checkPinComplete();
+        switchMode('receive');
+        // Auto-connect
+        setTimeout(() => connect(), 100);
+      }
 
       // ═══════════════ SENDER LOGIC ═══════════════
       let sendFiles = [];
@@ -1250,7 +1488,6 @@
       function startSendSession() {
         const pin = String(Math.floor(100000 + Math.random() * 900000));
         const peerId = 'devkit-fs-' + pin + '-sender';
-
         document.getElementById('send-step-files').classList.add('hidden');
         document.getElementById('send-step-waiting').classList.remove('hidden');
         document.getElementById('mode-tabs').classList.add('hidden');
@@ -1267,6 +1504,8 @@
 
         senderPeer.on('open', () => {
           setSendStatus('Waiting for devices...', 'connecting');
+          // Register discovery slot so receivers can find us
+          registerSenderSlot(pin, 'Web Page', detectPlatform());
         });
 
         senderPeer.on('connection', (conn) => {
@@ -1401,7 +1640,12 @@
           const start = i * CHUNK_SIZE;
           const end = Math.min(start + CHUNK_SIZE, file.size);
           const buffer = await file.slice(start, end).arrayBuffer();
-          senderConn.send({ kind: 'chunk', fileId, index: i, data: buffer });
+          senderConn.send({
+            kind: 'chunk',
+            fileId,
+            index: i,
+            data: Array.from(new Uint8Array(buffer)),
+          });
 
           const pct = Math.round((end / file.size) * 100);
           const fill = document.getElementById('spf-' + fileId);
@@ -1453,7 +1697,37 @@
         dot.className = 'dot' + (type === 'connecting' ? ' pulse' : '');
       }
 
+      // ─── Discovery slot (sender side) ───
+      let slotPeer = null;
+      function registerSenderSlot(pin, deviceName, platform, n) {
+        n = n || 0;
+        if (n > 9) return;
+        const timeKey = Math.floor(Date.now() / 300000);
+        const slotId = 'devkit-slot-' + timeKey + '-' + n;
+        const slot = new Peer(slotId, { config: { iceServers: ICE_SERVERS } });
+        slot.on('open', () => {
+          slotPeer = slot;
+          slot.on('connection', (conn) => {
+            conn.on('open', () =>
+              conn.send({ kind: 'announce', pin, deviceName, platform }),
+            );
+          });
+        });
+        slot.on('error', (err) => {
+          if (err.type === 'unavailable-id') {
+            slot.destroy();
+            registerSenderSlot(pin, deviceName, platform, n + 1);
+          }
+        });
+      }
+
       function resetSend() {
+        if (slotPeer) {
+          try {
+            slotPeer.destroy();
+          } catch (_) {}
+          slotPeer = null;
+        }
         if (senderPeer) {
           try {
             senderPeer.destroy();
@@ -1740,7 +2014,9 @@
             if (msg.kind === 'chunk') {
               const entry = receivingBuffers[msg.fileId];
               if (!entry) return;
-              entry.chunks[msg.index] = msg.data;
+              // data is number[] due to JSON serialization
+              const buf = new Uint8Array(msg.data).buffer;
+              entry.chunks[msg.index] = buf;
               const received = entry.chunks.filter(Boolean).length;
               const pct = Math.round((received / entry.meta.totalChunks) * 100);
               const transferred = Math.min(
