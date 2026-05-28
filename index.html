@@ -495,12 +495,341 @@
         flex: 1;
         margin-bottom: 0;
       }
+
+      /* ─── Mode tabs ─── */
+      .mode-tabs {
+        display: flex;
+        gap: 4px;
+        background: var(--surface);
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: 24px;
+      }
+      .mode-tab {
+        flex: 1;
+        height: 36px;
+        border: none;
+        border-radius: 9px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: transparent;
+        color: var(--text3);
+        transition: all 0.2s;
+      }
+      .mode-tab.active {
+        background: var(--accent);
+        color: #fff;
+        box-shadow: 0 4px 12px var(--accent-glow);
+      }
+      .mode-tab:not(.active):hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      /* ─── Sender screen ─── */
+      .drop-zone {
+        border: 2px dashed var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 16px;
+      }
+      .drop-zone:hover,
+      .drop-zone.drag-over {
+        border-color: var(--accent);
+        background: rgba(99, 102, 241, 0.04);
+      }
+      .drop-zone-icon {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
+      .drop-zone-text {
+        font-size: 12px;
+        color: var(--text2);
+        font-weight: 600;
+      }
+      .file-list-send {
+        max-height: 140px;
+        overflow-y: auto;
+        margin-bottom: 16px;
+      }
+      .file-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 6px;
+        font-size: 12px;
+      }
+      .file-chip-name {
+        flex: 1;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .file-chip-size {
+        color: var(--text3);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .file-chip-remove {
+        width: 18px;
+        height: 18px;
+        border: none;
+        background: none;
+        color: var(--error);
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .file-chip-remove:hover {
+        background: rgba(239, 68, 68, 0.1);
+      }
+      .pin-display {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin: 12px 0;
+      }
+      .pin-display-digit {
+        width: 2.6rem;
+        height: 3rem;
+        background: var(--surface);
+        border: 2px solid var(--accent);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--accent);
+      }
+      .device-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .device-item:hover {
+        border-color: var(--accent);
+        background: rgba(99, 102, 241, 0.06);
+      }
+      .device-icon {
+        font-size: 18px;
+      }
+      .device-info {
+        flex: 1;
+      }
+      .device-name {
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .device-platform {
+        font-size: 10px;
+        color: var(--text3);
+      }
+      .device-send-icon {
+        color: var(--accent);
+        font-size: 14px;
+      }
     </style>
   </head>
   <body>
     <div class="card">
       <div class="logo">K</div>
 
+      <!-- Mode Tabs -->
+      <div class="mode-tabs" id="mode-tabs">
+        <button class="mode-tab" id="tab-send" onclick="switchMode('send')">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+          >
+            <path d="M22 2 11 13" />
+            <path d="M22 2 15 22l-4-9-9-4 20-7z" />
+          </svg>
+          Send
+        </button>
+        <button
+          class="mode-tab active"
+          id="tab-receive"
+          onclick="switchMode('receive')"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Receive
+        </button>
+      </div>
+
+      <!-- ═══ SEND SCREEN ═══ -->
+      <div id="screen-send" class="hidden">
+        <!-- Step 1: Select files -->
+        <div id="send-step-files">
+          <h1>Send Files</h1>
+          <p class="subtitle">Select files to send via P2P to any device.</p>
+
+          <div
+            class="drop-zone"
+            id="drop-zone"
+            onclick="document.getElementById('file-input-send').click()"
+          >
+            <div class="drop-zone-icon">📁</div>
+            <div class="drop-zone-text">
+              Tap to select files or drag &amp; drop
+            </div>
+          </div>
+          <input
+            type="file"
+            id="file-input-send"
+            multiple
+            style="display: none"
+          />
+          <div class="file-list-send" id="send-file-list"></div>
+          <button
+            class="btn"
+            id="btn-start-send"
+            disabled
+            onclick="startSendSession()"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+              <line x1="12" y1="20" x2="12.01" y2="20" />
+            </svg>
+            Start Session
+          </button>
+        </div>
+
+        <!-- Step 2: Waiting for receivers -->
+        <div id="send-step-waiting" class="hidden">
+          <div class="status connecting" id="send-status-bar">
+            <div class="dot pulse"></div>
+            <span id="send-status-text">Waiting for devices...</span>
+          </div>
+
+          <div style="text-align: center; margin-bottom: 16px">
+            <div
+              class="field-label"
+              style="justify-content: center; margin-bottom: 8px"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              Share this PIN
+            </div>
+            <div class="pin-display" id="send-pin-display"></div>
+            <p style="font-size: 11px; color: var(--text3); margin-top: 8px">
+              On the other device: open this page &rarr; Receive tab &rarr;
+              enter PIN
+            </p>
+          </div>
+
+          <div id="send-devices-section" class="hidden">
+            <div class="field-label" style="margin-bottom: 8px">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              Devices found — tap to send
+            </div>
+            <div id="send-device-list"></div>
+          </div>
+
+          <button
+            class="btn btn-ghost"
+            onclick="resetSend()"
+            style="margin-top: 12px"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <!-- Step 3: Transferring -->
+        <div id="send-step-transferring" class="hidden">
+          <div class="status connected" id="send-transfer-status">
+            <div class="dot"></div>
+            <span id="send-transfer-text">Sending files...</span>
+          </div>
+          <div id="send-progress-list"></div>
+        </div>
+
+        <!-- Step 4: Done -->
+        <div id="send-step-done" class="hidden">
+          <div style="text-align: center; margin-bottom: 16px">
+            <div style="font-size: 28px; margin-bottom: 8px">✅</div>
+            <div style="font-size: 15px; font-weight: 800">All files sent!</div>
+            <div style="font-size: 12px; color: var(--text2); margin-top: 4px">
+              Transfer complete
+            </div>
+          </div>
+          <div class="stats" id="send-stats-grid"></div>
+          <button class="btn btn-ghost" onclick="resetSend()">
+            New Session
+          </button>
+        </div>
+      </div>
+      <!-- ═══ RECEIVE SCREEN ═══ -->
       <!-- PIN Entry screen -->
       <div id="screen-pin">
         <h1>Receive Files</h1>
@@ -764,6 +1093,308 @@
     <script>
       const CHUNK_SIZE = 64 * 1024;
 
+      // ─── Mode switching ───
+      let currentMode = 'receive';
+      function switchMode(mode) {
+        currentMode = mode;
+        document
+          .getElementById('tab-send')
+          .classList.toggle('active', mode === 'send');
+        document
+          .getElementById('tab-receive')
+          .classList.toggle('active', mode === 'receive');
+        document
+          .getElementById('screen-send')
+          .classList.toggle('hidden', mode !== 'send');
+        document
+          .getElementById('screen-pin')
+          .classList.toggle('hidden', mode !== 'receive');
+        document.getElementById('screen-receive').classList.add('hidden');
+      }
+      // Auto-detect mode from URL
+      const urlMode = new URLSearchParams(location.search).get('mode');
+      if (urlMode === 'send') switchMode('send');
+
+      // ═══════════════ SENDER LOGIC ═══════════════
+      let sendFiles = [];
+      let senderPeer = null;
+      let senderPendingConns = new Map();
+      let senderConn = null;
+      let sendStartTime = 0;
+
+      const dropZone = document.getElementById('drop-zone');
+      const fileInputSend = document.getElementById('file-input-send');
+      const sendFileList = document.getElementById('send-file-list');
+      const btnStartSend = document.getElementById('btn-start-send');
+
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+      });
+      dropZone.addEventListener('dragleave', () =>
+        dropZone.classList.remove('drag-over'),
+      );
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        addSendFiles(Array.from(e.dataTransfer.files));
+      });
+      fileInputSend.addEventListener('change', (e) => {
+        addSendFiles(Array.from(e.target.files));
+        e.target.value = '';
+      });
+
+      function addSendFiles(newFiles) {
+        const existing = new Set(sendFiles.map((f) => f.name + f.size));
+        sendFiles = [
+          ...sendFiles,
+          ...newFiles.filter((f) => !existing.has(f.name + f.size)),
+        ];
+        renderSendFileList();
+      }
+      function removeSendFile(idx) {
+        sendFiles.splice(idx, 1);
+        renderSendFileList();
+      }
+      function renderSendFileList() {
+        btnStartSend.disabled = sendFiles.length === 0;
+        sendFileList.innerHTML = sendFiles
+          .map(
+            (f, i) => `
+          <div class="file-chip">
+            <span class="file-chip-name">${f.name}</span>
+            <span class="file-chip-size">${formatBytes(f.size)}</span>
+            <button class="file-chip-remove" onclick="removeSendFile(${i})">&times;</button>
+          </div>
+        `,
+          )
+          .join('');
+      }
+
+      function startSendSession() {
+        const pin = String(Math.floor(100000 + Math.random() * 900000));
+        const peerId = 'devkit-fs-' + pin + '-sender';
+
+        document.getElementById('send-step-files').classList.add('hidden');
+        document.getElementById('send-step-waiting').classList.remove('hidden');
+        document.getElementById('mode-tabs').classList.add('hidden');
+
+        // Display PIN
+        document.getElementById('send-pin-display').innerHTML = pin
+          .split('')
+          .map((d) => `<div class="pin-display-digit">${d}</div>`)
+          .join('');
+
+        senderPeer = new Peer(peerId, {
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+            ],
+          },
+        });
+
+        senderPeer.on('open', () => {
+          setSendStatus('Waiting for devices...', 'connecting');
+        });
+
+        senderPeer.on('connection', (conn) => {
+          conn.on('data', (msg) => {
+            if (msg.kind === 'hello') {
+              conn._deviceName = msg.deviceName;
+              conn._devicePlatform = msg.platform;
+              senderPendingConns.set(conn.peer, conn);
+              renderSenderDevices();
+            }
+          });
+          conn.on('close', () => {
+            senderPendingConns.delete(conn.peer);
+            renderSenderDevices();
+          });
+        });
+
+        senderPeer.on('error', (err) => {
+          if (err.type === 'unavailable-id') {
+            setSendStatus('PIN in use — try again', 'error-status');
+            setTimeout(() => startSendSession(), 1000);
+          } else {
+            setSendStatus('Error: ' + err.message, 'error-status');
+          }
+        });
+      }
+
+      function renderSenderDevices() {
+        const section = document.getElementById('send-devices-section');
+        const list = document.getElementById('send-device-list');
+        if (senderPendingConns.size === 0) {
+          section.classList.add('hidden');
+          return;
+        }
+        section.classList.remove('hidden');
+        list.innerHTML = '';
+        senderPendingConns.forEach((conn, peerId) => {
+          // Extract deviceName from hello msg stored on conn
+          const div = document.createElement('div');
+          div.className = 'device-item';
+          div.innerHTML = `
+            <span class="device-icon">${getDeviceEmoji(conn._devicePlatform || '')}</span>
+            <div class="device-info">
+              <div class="device-name">${conn._deviceName || peerId}</div>
+              <div class="device-platform">${conn._devicePlatform || 'Unknown'}</div>
+            </div>
+            <span class="device-send-icon">➤</span>
+          `;
+          div.onclick = () => selectAndSend(peerId);
+          list.appendChild(div);
+        });
+      }
+
+      function getDeviceEmoji(platform) {
+        if (['iOS', 'Android', 'iPadOS'].includes(platform)) return '📱';
+        if (['macOS', 'Windows', 'Linux'].includes(platform)) return '💻';
+        return '🖥️';
+      }
+
+      // ─── Send to selected device ───
+      async function selectAndSend(peerId) {
+        const selectedConn = senderPendingConns.get(peerId);
+        if (!selectedConn) return;
+
+        // Reject others
+        senderPendingConns.forEach((c, id) => {
+          if (id !== peerId) {
+            c.send({ kind: 'device-rejected' });
+            setTimeout(() => c.close(), 200);
+          }
+        });
+        senderPendingConns.clear();
+
+        senderConn = selectedConn;
+        selectedConn.send({ kind: 'device-accepted' });
+
+        // Switch to transferring UI
+        document.getElementById('send-step-waiting').classList.add('hidden');
+        document
+          .getElementById('send-step-transferring')
+          .classList.remove('hidden');
+        sendStartTime = Date.now();
+
+        // Send files
+        for (const file of sendFiles) {
+          await sendOneFile(file);
+        }
+
+        // Done
+        senderConn.close();
+        showSendDone();
+      }
+
+      async function sendOneFile(file) {
+        const fileId = crypto.randomUUID();
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        const meta = {
+          id: fileId,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          totalChunks,
+        };
+
+        senderConn.send({ kind: 'meta', file: meta });
+
+        // Create progress item
+        const div = document.createElement('div');
+        div.className = 'file-item';
+        div.id = 'sfi-' + fileId;
+        div.innerHTML = `
+          <div class="file-row">
+            <span class="file-name">${file.name}</span>
+            <span class="file-size" id="ss-${fileId}">0 / ${formatBytes(file.size)}</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="spf-${fileId}" style="width:0%"></div>
+          </div>
+        `;
+        document.getElementById('send-progress-list').appendChild(div);
+
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const buffer = await file.slice(start, end).arrayBuffer();
+          senderConn.send({ kind: 'chunk', fileId, index: i, data: buffer });
+
+          const pct = Math.round((end / file.size) * 100);
+          const fill = document.getElementById('spf-' + fileId);
+          const sz = document.getElementById('ss-' + fileId);
+          if (fill) fill.style.width = pct + '%';
+          if (sz)
+            sz.textContent = formatBytes(end) + ' / ' + formatBytes(file.size);
+
+          await new Promise((r) => setTimeout(r, 0));
+        }
+
+        senderConn.send({ kind: 'done', fileId });
+        const item = document.getElementById('sfi-' + fileId);
+        const fill = document.getElementById('spf-' + fileId);
+        const sz = document.getElementById('ss-' + fileId);
+        if (item) item.classList.add('done');
+        if (fill) {
+          fill.style.width = '100%';
+          fill.classList.add('done');
+        }
+        if (sz) sz.textContent = formatBytes(file.size) + ' ✓';
+      }
+
+      function showSendDone() {
+        const ms = Date.now() - sendStartTime;
+        const totalSize = sendFiles.reduce((a, f) => a + f.size, 0);
+        document
+          .getElementById('send-step-transferring')
+          .classList.add('hidden');
+        document.getElementById('send-step-done').classList.remove('hidden');
+        document.getElementById('send-stats-grid').innerHTML = [
+          { label: 'Files', val: sendFiles.length },
+          { label: 'Size', val: formatBytes(totalSize) },
+          { label: 'Duration', val: formatDuration(ms) },
+        ]
+          .map(
+            (s) =>
+              `<div class="stat"><span class="stat-val">${s.val}</span><span class="stat-label">${s.label}</span></div>`,
+          )
+          .join('');
+      }
+
+      function setSendStatus(text, type) {
+        const bar = document.getElementById('send-status-bar');
+        const span = document.getElementById('send-status-text');
+        const dot = bar.querySelector('.dot');
+        bar.className = 'status ' + type;
+        span.textContent = text;
+        dot.className = 'dot' + (type === 'connecting' ? ' pulse' : '');
+      }
+
+      function resetSend() {
+        if (senderPeer) {
+          try {
+            senderPeer.destroy();
+          } catch (_) {}
+          senderPeer = null;
+        }
+        senderPendingConns.clear();
+        senderConn = null;
+        sendFiles = [];
+        document.getElementById('send-step-files').classList.remove('hidden');
+        document.getElementById('send-step-waiting').classList.add('hidden');
+        document
+          .getElementById('send-step-transferring')
+          .classList.add('hidden');
+        document.getElementById('send-step-done').classList.add('hidden');
+        document.getElementById('send-file-list').innerHTML = '';
+        document.getElementById('send-progress-list').innerHTML = '';
+        document.getElementById('mode-tabs').classList.remove('hidden');
+        btnStartSend.disabled = true;
+      }
+
       // ─── Guide toggle ───
       function toggleGuide() {
         const body = document.getElementById('guide-body');
@@ -962,6 +1593,7 @@
 
         document.getElementById('screen-pin').classList.add('hidden');
         document.getElementById('screen-receive').classList.remove('hidden');
+        document.getElementById('mode-tabs').classList.add('hidden');
 
         doConnect(pin, deviceName, platform);
       }
