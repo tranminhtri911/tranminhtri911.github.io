@@ -516,6 +516,32 @@
     <script>
       const CHUNK_SIZE = 64 * 1024;
 
+      // ─── Device detection ───
+      function detectDeviceName() {
+        const ua = navigator.userAgent;
+        if (/iPhone/.test(ua)) return 'iPhone';
+        if (/iPad/.test(ua)) return 'iPad';
+        if (/Android/.test(ua)) {
+          const m = ua.match(/Android[^;]*;\s*([^)]+)\)/);
+          return m ? m[1].trim() : 'Android';
+        }
+        if (/Mac/.test(ua)) return 'Mac';
+        if (/Windows/.test(ua)) return 'Windows PC';
+        if (/Linux/.test(ua)) return 'Linux PC';
+        return 'Unknown Device';
+      }
+      function detectPlatform() {
+        const ua = navigator.userAgent;
+        if (/iPhone/.test(ua)) return 'iOS';
+        if (/iPad/.test(ua)) return 'iPadOS';
+        if (/Android/.test(ua)) return 'Android';
+        if (/Mac/.test(ua)) return 'macOS';
+        if (/Windows/.test(ua)) return 'Windows';
+        if (/Linux/.test(ua)) return 'Linux';
+        return 'Unknown';
+      }
+      document.getElementById('device-name').value = detectDeviceName();
+
       // ─── PIN input wiring ───
       const digits = [...document.querySelectorAll('.pin-digit')];
       const btnConnect = document.getElementById('btn-connect');
@@ -598,14 +624,14 @@
         div.className = 'file-item';
         div.id = 'fi-' + meta.id;
         div.innerHTML = `
-        <div class="file-row">
-          <span class="file-name">${meta.name}</span>
-          <span class="file-size" id="size-${meta.id}">0 / ${formatBytes(meta.size)}</span>
-        </div>
-        <div class="progress-track">
-          <div class="progress-fill" id="pf-${meta.id}" style="width:0%"></div>
-        </div>
-      `;
+          <div class="file-row">
+            <span class="file-name">${meta.name}</span>
+            <span class="file-size" id="size-${meta.id}">0 / ${formatBytes(meta.size)}</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="pf-${meta.id}" style="width:0%"></div>
+          </div>
+        `;
         document.getElementById('files-list').appendChild(div);
       }
 
@@ -665,11 +691,18 @@
       // ─── PeerJS Connection ───
       function connect() {
         const pin = getPin();
+        const deviceName =
+          document.getElementById('device-name').value.trim() ||
+          detectDeviceName();
+        const platform = detectPlatform();
+
         document.getElementById('screen-pin').classList.add('hidden');
         document.getElementById('screen-receive').classList.remove('hidden');
         setStatus('Connecting...', 'connecting');
 
-        const myId = 'devkit-fs-' + pin + '-receiver';
+        // Random suffix allows multiple receivers simultaneously
+        const randSuffix = Math.random().toString(36).slice(2, 7);
+        const myId = 'devkit-fs-' + pin + '-r-' + randSuffix;
         const senderId = 'devkit-fs-' + pin + '-sender';
 
         peer = new Peer(myId, {
@@ -685,21 +718,27 @@
           conn = peer.connect(senderId, { reliable: true });
 
           conn.on('open', () => {
-            setStatus('Verifying PIN...', 'connecting');
-            conn.send({ kind: 'pin-verify', pin });
+            // Announce this device to sender
+            conn.send({ kind: 'hello', deviceName, platform });
+            setStatus('Waiting for sender to select you...', 'connecting');
+            document
+              .getElementById('screen-pending')
+              .classList.remove('hidden');
           });
 
           conn.on('data', (msg) => {
-            if (msg.kind === 'pin-ok') {
-              setStatus('Connected — waiting for files...', 'connected');
+            if (msg.kind === 'device-accepted') {
+              document.getElementById('screen-pending').classList.add('hidden');
+              setStatus('Connected — receiving files...', 'connected');
               startTime = Date.now();
               return;
             }
-            if (msg.kind === 'pin-fail') {
-              setStatus(
-                'Wrong PIN! Please reload and try again.',
-                'error-status',
-              );
+            if (msg.kind === 'device-rejected') {
+              document.getElementById('screen-pending').classList.add('hidden');
+              document
+                .getElementById('screen-rejected')
+                .classList.remove('hidden');
+              document.getElementById('status-bar').style.display = 'none';
               return;
             }
             if (msg.kind === 'meta') {
@@ -737,7 +776,6 @@
               });
               delete receivingBuffers[msg.fileId];
               markFileDone(msg.fileId, entry.meta.size);
-              // Auto-download
               const a = document.createElement('a');
               a.href = url;
               a.download = entry.meta.name;
@@ -757,14 +795,6 @@
         });
 
         peer.on('error', (err) => {
-          if (err.type === 'unavailable-id') {
-            setStatus('Session ID conflict, retrying...', 'connecting');
-            setTimeout(() => {
-              peer.destroy();
-              connect();
-            }, 1000);
-            return;
-          }
           setStatus('Error: ' + err.message, 'error-status');
         });
       }
