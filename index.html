@@ -3,10 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>KanDev Toolkit — Receive Files</title>
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>KanDev Toolkit — File Share</title>
     <meta
       name="description"
-      content="Receive files from KanDev Toolkit via WiFi P2P transfer. No installation required."
+      content="Send or receive files via KanDev Toolkit P2P transfer. No installation required."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
@@ -942,18 +948,40 @@
         .addEventListener('click', () => location.reload());
 
       // ─── PeerJS Connection ───
+      let retryCount = 0;
+      const MAX_RETRIES = 5;
+      const RETRY_DELAY_MS = 2500;
+
       function connect() {
         const pin = getPin();
         const deviceName =
           document.getElementById('device-name').value.trim() ||
           detectDeviceName();
         const platform = detectPlatform();
+        retryCount = 0;
 
         document.getElementById('screen-pin').classList.add('hidden');
         document.getElementById('screen-receive').classList.remove('hidden');
-        setStatus('Connecting...', 'connecting');
 
-        // Random suffix allows multiple receivers simultaneously
+        doConnect(pin, deviceName, platform);
+      }
+
+      function doConnect(pin, deviceName, platform) {
+        setStatus(
+          retryCount === 0
+            ? 'Connecting...'
+            : `Sender not found — retrying (${retryCount}/${MAX_RETRIES})...`,
+          'connecting',
+        );
+
+        if (peer) {
+          try {
+            peer.destroy();
+          } catch (_) {}
+          peer = null;
+          conn = null;
+        }
+
         const randSuffix = Math.random().toString(36).slice(2, 7);
         const myId = 'devkit-fs-' + pin + '-r-' + randSuffix;
         const senderId = 'devkit-fs-' + pin + '-sender';
@@ -971,7 +999,6 @@
           conn = peer.connect(senderId, { reliable: true });
 
           conn.on('open', () => {
-            // Announce this device to sender
             conn.send({ kind: 'hello', deviceName, platform });
             setStatus('Waiting for sender to select you...', 'connecting');
             document
@@ -1043,12 +1070,37 @@
           });
 
           conn.on('error', (err) =>
-            setStatus('Error: ' + err.message, 'error-status'),
+            setStatus('Connection error: ' + err.message, 'error-status'),
           );
         });
 
         peer.on('error', (err) => {
-          setStatus('Error: ' + err.message, 'error-status');
+          if (err.type === 'peer-unavailable') {
+            if (retryCount < MAX_RETRIES) {
+              retryCount++;
+              setStatus(
+                `Sender not found — retrying (${retryCount}/${MAX_RETRIES})...`,
+                'connecting',
+              );
+              setTimeout(
+                () => doConnect(pin, deviceName, platform),
+                RETRY_DELAY_MS,
+              );
+            } else {
+              setStatus(
+                'Sender not found. Make sure the sender has started the session.',
+                'error-status',
+              );
+              const retryBtn = document.createElement('button');
+              retryBtn.className = 'btn btn-ghost';
+              retryBtn.style.marginTop = '12px';
+              retryBtn.textContent = '↩ Try Again';
+              retryBtn.onclick = () => location.reload();
+              document.getElementById('screen-receive').appendChild(retryBtn);
+            }
+          } else {
+            setStatus('Error: ' + err.message, 'error-status');
+          }
         });
       }
 
