@@ -827,6 +827,16 @@
       .btn-view:hover {
         background: var(--accent-glow);
       }
+      .btn-secondary {
+        background: transparent;
+        border: 1.5px solid var(--accent);
+        color: var(--accent);
+        box-shadow: none;
+        margin-top: 10px;
+      }
+      .btn-secondary:hover {
+        background: var(--accent-glow);
+      }
     </style>
   </head>
   <body>
@@ -1069,6 +1079,14 @@
             </div>
           </div>
           <div class="stats" id="send-stats-grid"></div>
+          <button
+            class="btn btn-secondary"
+            id="btn-send-more"
+            style="display: none"
+            onclick="senderSendMore()"
+          >
+            ＋ Send More
+          </button>
           <button class="btn btn-ghost" onclick="resetSend()">
             New Session
           </button>
@@ -1268,6 +1286,25 @@
             <line x1="12" y1="20" x2="12.01" y2="20" />
           </svg>
           Connect
+        </button>
+        <button
+          class="btn btn-ghost"
+          style="margin-top: 10px"
+          onclick="switchMode('scan')"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+            <path d="M11 8v6M8 11h6" />
+          </svg>
+          Scan Nearby
         </button>
       </div>
 
@@ -1713,6 +1750,7 @@
       let senderPendingConns = new Map();
       let senderConn = null;
       let sendStartTime = 0;
+      let isContinuingSend = false; // true when reusing existing senderConn for another batch
 
       const dropZone = document.getElementById('drop-zone');
       const fileInputSend = document.getElementById('file-input-send');
@@ -1764,6 +1802,26 @@
       }
 
       function startSendSession() {
+        // If reusing an existing connection ("Send More" flow), skip peer setup
+        if (isContinuingSend && senderConn && senderConn.open) {
+          isContinuingSend = false;
+          document.getElementById('send-step-files').classList.add('hidden');
+          document.getElementById('send-progress-list').innerHTML = '';
+          document
+            .getElementById('send-step-transferring')
+            .classList.remove('hidden');
+          sendStartTime = Date.now();
+          (async () => {
+            for (const file of sendFiles) {
+              await sendOneFile(file);
+            }
+            await waitForBufferFullDrain(senderConn);
+            senderConn.send({ kind: 'transfer-complete' });
+            showSendDone();
+          })();
+          return;
+        }
+
         const pin = String(Math.floor(100000 + Math.random() * 900000));
         const peerId = 'devkit-fs-' + pin + '-sender';
         document.getElementById('send-step-files').classList.add('hidden');
@@ -1972,6 +2030,21 @@
               `<div class="stat"><span class="stat-val">${s.val}</span><span class="stat-label">${s.label}</span></div>`,
           )
           .join('');
+        // Show "Send More" if the connection is still alive
+        const btnSendMore = document.getElementById('btn-send-more');
+        if (btnSendMore && senderConn && senderConn.open) {
+          btnSendMore.style.display = '';
+        }
+      }
+
+      function senderSendMore() {
+        // Keep senderConn alive, go back to file selection for next batch
+        isContinuingSend = true;
+        sendFiles = [];
+        document.getElementById('send-step-done').classList.add('hidden');
+        document.getElementById('send-file-list').innerHTML = '';
+        btnStartSend.disabled = true;
+        document.getElementById('send-step-files').classList.remove('hidden');
       }
 
       function setSendStatus(text, type) {
@@ -2024,6 +2097,9 @@
         senderPendingConns.clear();
         senderConn = null;
         sendFiles = [];
+        isContinuingSend = false;
+        const btnSendMore = document.getElementById('btn-send-more');
+        if (btnSendMore) btnSendMore.style.display = 'none';
         document.getElementById('send-step-files').classList.remove('hidden');
         document.getElementById('send-step-waiting').classList.add('hidden');
         document
@@ -2133,6 +2209,7 @@
       let receivingBuffers = {};
       let receivedFiles = [];
       let startTime = 0;
+      let summaryShown = false; // guard against duplicate showSummary() calls
 
       function formatBytes(b) {
         if (b === 0) return '0 B';
@@ -2205,6 +2282,8 @@
       }
 
       function showSummary() {
+        if (summaryShown) return; // prevent duplicate calls
+        summaryShown = true;
         const ms = Date.now() - startTime;
         const totalSize = receivedFiles.reduce((a, f) => a + f.size, 0);
         const grid = document.getElementById('stats-grid');
@@ -2229,10 +2308,12 @@
 
       function receiveMore() {
         // Hide summary, reset file list, keep connection alive for next batch
+        summaryShown = false;
         document.getElementById('summary').classList.remove('show');
         document.getElementById('btn-receive-more').style.display = 'none';
         document.getElementById('files-list').innerHTML = '';
         receivedFiles = [];
+        lbImages = [];
         startTime = Date.now();
         setStatus('Waiting for next batch...', 'connecting');
       }
@@ -2263,6 +2344,7 @@
           detectDeviceName();
         const platform = detectPlatform();
         retryCount = 0;
+        summaryShown = false; // reset for new session
 
         document.getElementById('screen-pin').classList.add('hidden');
         document.getElementById('screen-receive').classList.remove('hidden');
@@ -2350,7 +2432,16 @@
             if (msg.kind === 'done') {
               const entry = receivingBuffers[msg.fileId];
               if (!entry) return;
-              const blob = new Blob(entry.chunks, {
+              // Normalize chunks: same logic as PeerService.ts to handle
+              // Uint8Array, ArrayBuffer, or number[] from BinaryPack deserialization
+              const normalizedChunks = entry.chunks.map((c) => {
+                if (!c) return new Uint8Array(0);
+                if (c instanceof Uint8Array) return c;
+                if (c instanceof ArrayBuffer) return c;
+                if (Array.isArray(c)) return new Uint8Array(c);
+                return c;
+              });
+              const blob = new Blob(normalizedChunks, {
                 type: entry.meta.type || 'application/octet-stream',
               });
               const url = URL.createObjectURL(blob);
@@ -2383,9 +2474,10 @@
           });
 
           conn.on('close', () => {
-            // Connection closed unexpectedly or session ended
-            if (receivedFiles.length > 0) showSummary();
-            else setStatus('Connection closed.', 'error-status');
+            // Fallback: connection dropped before transfer-complete was received
+            if (!summaryShown && receivedFiles.length > 0) showSummary();
+            else if (!summaryShown)
+              setStatus('Connection closed.', 'error-status');
           });
 
           conn.on('error', (err) =>
