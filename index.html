@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KanDev Toolkit — Receive Files</title>
+    <meta
+      name="description"
+      content="Receive files from KanDev Toolkit via WiFi P2P transfer. No installation required."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <style>
+      :root {
+        --accent: #6366f1;
+        --accent-glow: rgba(99, 102, 241, 0.18);
+        --success: #10b981;
+        --error: #ef4444;
+        --bg: #090d16;
+        --bg2: #111827;
+        --surface: #1f2937;
+        --border: rgba(243, 244, 246, 0.08);
+        --text: #f9fafb;
+        --text2: #9ca3af;
+        --text3: #6b7280;
+        --radius: 14px;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: 'Inter', system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        -webkit-font-smoothing: antialiased;
+      }
+      .card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 32px 28px;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+      }
+      .logo {
+        width: 44px;
+        height: 44px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 18px;
+        color: #fff;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 24px var(--accent-glow);
+      }
+      h1 {
+        font-size: 20px;
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+      .subtitle {
+        font-size: 13px;
+        color: var(--text2);
+        margin-bottom: 28px;
+        line-height: 1.5;
+      }
+
+      /* PIN inputs */
+      .pin-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--text3);
+        margin-bottom: 12px;
+      }
+      .pin-grid {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+      }
+      .pin-digit {
+        flex: 1;
+        height: 56px;
+        background: var(--surface);
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        color: var(--accent);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 24px;
+        font-weight: 700;
+        text-align: center;
+        outline: none;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+        -webkit-appearance: none;
+      }
+      .pin-digit:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+      }
+      .pin-digit.filled {
+        border-color: var(--accent);
+      }
+
+      .btn {
+        width: 100%;
+        height: 44px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        border: none;
+        border-radius: 12px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        transition:
+          filter 0.2s,
+          transform 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        box-shadow: 0 6px 20px var(--accent-glow);
+      }
+      .btn:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
+      }
+      .btn:active {
+        transform: scale(0.97);
+      }
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .btn-ghost {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text2);
+        box-shadow: none;
+        margin-top: 10px;
+      }
+      .btn-ghost:hover {
+        background: var(--surface);
+        border-color: var(--text3);
+      }
+
+      /* Status */
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      .status.connecting {
+        background: rgba(245, 158, 11, 0.08);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        color: #f59e0b;
+      }
+      .status.connected {
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        color: var(--success);
+      }
+      .status.error-status {
+        background: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: var(--error);
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: currentColor;
+        position: relative;
+      }
+      .dot.pulse::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: currentColor;
+        animation: ping 1.5s ease-in-out infinite;
+        opacity: 0.4;
+      }
+      @keyframes ping {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.4;
+        }
+        50% {
+          transform: scale(2.2);
+          opacity: 0;
+        }
+      }
+
+      /* Progress item */
+      .file-item {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 8px;
+        transition: border-color 0.3s;
+      }
+      .file-item.done {
+        border-color: rgba(16, 185, 129, 0.25);
+        background: rgba(16, 185, 129, 0.05);
+      }
+      .file-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .file-name {
+        font-size: 12px;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 240px;
+      }
+      .file-size {
+        font-size: 11px;
+        color: var(--text2);
+        white-space: nowrap;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .progress-track {
+        height: 5px;
+        background: var(--border);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #6366f1, #8b5cf6);
+        transition: width 0.25s ease;
+        box-shadow: 0 0 8px var(--accent-glow);
+      }
+      .progress-fill.done {
+        background: var(--success);
+        box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+      }
+
+      /* Summary */
+      .summary {
+        display: none;
+      }
+      .summary.show {
+        display: block;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin: 16px 0;
+      }
+      .stat {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px;
+        text-align: center;
+      }
+      .stat-val {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--accent);
+        display: block;
+      }
+      .stat-label {
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text3);
+        margin-top: 2px;
+        display: block;
+      }
+
+      .hidden {
+        display: none;
+      }
+      #files-list {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-top: 8px;
+      }
+
+      /* Spinner */
+      .spinner {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2.5px solid rgba(255, 255, 255, 0.2);
+        border-top-color: #fff;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f8fafc;
+          --bg2: #ffffff;
+          --surface: #e2e8f0;
+          --border: rgba(15, 23, 42, 0.06);
+          --text: #0f172a;
+          --text2: #475569;
+          --text3: #94a3b8;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="logo">K</div>
+
+      <!-- PIN Entry screen -->
+      <div id="screen-pin">
+        <h1>Receive Files</h1>
+        <p class="subtitle">
+          Enter the 6-digit PIN displayed on the sender's device.
+        </p>
+
+        <!-- Device name -->
+        <div class="pin-label" style="margin-top: 0">Your device name</div>
+        <input
+          id="device-name"
+          type="text"
+          placeholder="e.g. iPhone, Pixel 7..."
+          autocomplete="off"
+          style="
+            width: 100%;
+            height: 44px;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            padding: 0 14px;
+            outline: none;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+          "
+          onfocus="this.style.borderColor = 'var(--accent)'"
+          onblur="this.style.borderColor = 'var(--border)'"
+        />
+
+        <div class="pin-label">PIN Code</div>
+        <div class="pin-grid" id="pin-grid">
+          <input
+            class="pin-digit"
+            type="text"
+            inputmode="numeric"
+            maxlength="1"
+            id="d0"
+            autocomplete="off"
+          />
+          <input
+            class="pin-digit"
+            type="text"
+            inputmode="numeric"
+            maxlength="1"
+            id="d1"
+            autocomplete="off"
+          />
+          <input
+            class="pin-digit"
+            type="text"
+            inputmode="numeric"
+            maxlength="1"
+            id="d2"
+            autocomplete="off"
+          />
+          <input
+            class="pin-digit"
+            type="text"
+            inputmode="numeric"
+            maxlength="1"
+            id="d3"
+            autocomplete="off"
+          />
+          <input
+            class="pin-digit"
+            type="text"
+            inputmode="numeric"
+            maxlength="1"
+            id="d4"
+            autocomplete="off"
+          />
+          <input
+            class="pin-digit"
+            type="text"
+            inputmode="numeric"
+            maxlength="1"
+            id="d5"
+            autocomplete="off"
+          />
+        </div>
+        <button class="btn" id="btn-connect" disabled>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+          >
+            <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+            <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+            <line x1="12" y1="20" x2="12.01" y2="20" />
+          </svg>
+          Connect
+        </button>
+      </div>
+
+      <!-- Receive screen -->
+      <div id="screen-receive" class="hidden">
+        <div class="status connecting" id="status-bar">
+          <div class="dot pulse"></div>
+          <span id="status-text">Connecting...</span>
+        </div>
+
+        <!-- Pending state: waiting for sender to select this device -->
+        <div
+          id="screen-pending"
+          class="hidden"
+          style="text-align: center; padding: 24px 0"
+        >
+          <div style="font-size: 32px; margin-bottom: 12px">📲</div>
+          <div style="font-size: 14px; font-weight: 700; margin-bottom: 6px">
+            Waiting for sender...
+          </div>
+          <div style="font-size: 12px; color: var(--text2)">
+            The sender will see your device and tap to start transfer.
+          </div>
+        </div>
+
+        <!-- Rejected state -->
+        <div
+          id="screen-rejected"
+          class="hidden"
+          style="text-align: center; padding: 24px 0"
+        >
+          <div style="font-size: 32px; margin-bottom: 12px">❌</div>
+          <div style="font-size: 14px; font-weight: 700; margin-bottom: 6px">
+            Not selected
+          </div>
+          <div
+            style="font-size: 12px; color: var(--text2); margin-bottom: 20px"
+          >
+            The sender chose another device. Enter the PIN again to retry.
+          </div>
+          <button class="btn btn-ghost" onclick="location.reload()">
+            Try Again
+          </button>
+        </div>
+
+        <div id="files-list"></div>
+
+        <!-- Summary -->
+        <div class="summary" id="summary">
+          <div style="text-align: center; margin-bottom: 16px">
+            <div style="font-size: 28px; margin-bottom: 8px">🎉</div>
+            <div style="font-size: 15px; font-weight: 800">
+              Transfer Complete!
+            </div>
+            <div style="font-size: 12px; color: var(--text2); margin-top: 4px">
+              All files received successfully
+            </div>
+          </div>
+          <div class="stats" id="stats-grid"></div>
+          <button class="btn" id="btn-download-all">⬇ Download All</button>
+          <button class="btn btn-ghost" id="btn-new-session">
+            Start New Session
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const CHUNK_SIZE = 64 * 1024;
+
+      // ─── PIN input wiring ───
+      const digits = [...document.querySelectorAll('.pin-digit')];
+      const btnConnect = document.getElementById('btn-connect');
+
+      function getPin() {
+        return digits.map((d) => d.value).join('');
+      }
+      function checkPinComplete() {
+        const ok =
+          getPin().length === 6 && digits.every((d) => /^\d$/.test(d.value));
+        btnConnect.disabled = !ok;
+        digits.forEach((d) => d.classList.toggle('filled', d.value.length > 0));
+      }
+
+      digits.forEach((d, i) => {
+        d.addEventListener('input', (e) => {
+          const v = e.target.value.replace(/\D/g, '').slice(-1);
+          e.target.value = v;
+          if (v && i < 5) digits[i + 1].focus();
+          checkPinComplete();
+        });
+        d.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !d.value && i > 0) digits[i - 1].focus();
+          if (e.key === 'Enter' && !btnConnect.disabled) connect();
+        });
+        d.addEventListener('paste', (e) => {
+          e.preventDefault();
+          const text = e.clipboardData
+            .getData('text')
+            .replace(/\D/g, '')
+            .slice(0, 6);
+          digits.forEach((d2, j) => {
+            d2.value = text[j] || '';
+          });
+          digits[Math.min(text.length, 5)].focus();
+          checkPinComplete();
+        });
+      });
+
+      // Auto-fill PIN from URL ?pin=123456
+      const urlPin = new URLSearchParams(location.search).get('pin') || '';
+      if (urlPin.length === 6 && /^\d+$/.test(urlPin)) {
+        urlPin.split('').forEach((c, i) => {
+          digits[i].value = c;
+        });
+        checkPinComplete();
+      }
+
+      // ─── State ───
+      let peer = null;
+      let conn = null;
+      let receivingBuffers = {};
+      let receivedFiles = [];
+      let startTime = 0;
+
+      function formatBytes(b) {
+        if (b === 0) return '0 B';
+        const k = 1024,
+          sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(b) / Math.log(k));
+        return (b / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
+      }
+      function formatDuration(ms) {
+        if (ms < 1000) return ms + 'ms';
+        const s = Math.floor(ms / 1000);
+        return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+      }
+
+      function setStatus(text, type) {
+        const bar = document.getElementById('status-bar');
+        const span = document.getElementById('status-text');
+        const dot = bar.querySelector('.dot');
+        bar.className = 'status ' + type;
+        span.textContent = text;
+        dot.className = 'dot' + (type === 'connecting' ? ' pulse' : '');
+      }
+
+      function createFileItem(meta) {
+        const div = document.createElement('div');
+        div.className = 'file-item';
+        div.id = 'fi-' + meta.id;
+        div.innerHTML = `
+        <div class="file-row">
+          <span class="file-name">${meta.name}</span>
+          <span class="file-size" id="size-${meta.id}">0 / ${formatBytes(meta.size)}</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="pf-${meta.id}" style="width:0%"></div>
+        </div>
+      `;
+        document.getElementById('files-list').appendChild(div);
+      }
+
+      function updateFileProgress(fileId, pct, transferred, total) {
+        const fill = document.getElementById('pf-' + fileId);
+        const size = document.getElementById('size-' + fileId);
+        if (fill) fill.style.width = pct + '%';
+        if (size)
+          size.textContent =
+            formatBytes(transferred) + ' / ' + formatBytes(total);
+      }
+
+      function markFileDone(fileId, size) {
+        const item = document.getElementById('fi-' + fileId);
+        const fill = document.getElementById('pf-' + fileId);
+        const sz = document.getElementById('size-' + fileId);
+        if (item) item.classList.add('done');
+        if (fill) {
+          fill.style.width = '100%';
+          fill.classList.add('done');
+        }
+        if (sz) sz.textContent = formatBytes(size) + ' ✓';
+      }
+
+      function showSummary() {
+        const ms = Date.now() - startTime;
+        const totalSize = receivedFiles.reduce((a, f) => a + f.size, 0);
+        const grid = document.getElementById('stats-grid');
+        grid.innerHTML = [
+          { label: 'Total Files', val: receivedFiles.length },
+          { label: 'Total Size', val: formatBytes(totalSize) },
+          { label: 'Duration', val: formatDuration(ms) },
+        ]
+          .map(
+            (s) =>
+              `<div class="stat"><span class="stat-val">${s.val}</span><span class="stat-label">${s.label}</span></div>`,
+          )
+          .join('');
+        document.getElementById('summary').classList.add('show');
+        setStatus('All files received!', 'connected');
+      }
+
+      document
+        .getElementById('btn-download-all')
+        .addEventListener('click', () => {
+          receivedFiles.forEach((f) => {
+            const a = document.createElement('a');
+            a.href = f.url;
+            a.download = f.name;
+            a.click();
+          });
+        });
+      document
+        .getElementById('btn-new-session')
+        .addEventListener('click', () => location.reload());
+
+      // ─── PeerJS Connection ───
+      function connect() {
+        const pin = getPin();
+        document.getElementById('screen-pin').classList.add('hidden');
+        document.getElementById('screen-receive').classList.remove('hidden');
+        setStatus('Connecting...', 'connecting');
+
+        const myId = 'devkit-fs-' + pin + '-receiver';
+        const senderId = 'devkit-fs-' + pin + '-sender';
+
+        peer = new Peer(myId, {
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+            ],
+          },
+        });
+
+        peer.on('open', () => {
+          conn = peer.connect(senderId, { reliable: true });
+
+          conn.on('open', () => {
+            setStatus('Verifying PIN...', 'connecting');
+            conn.send({ kind: 'pin-verify', pin });
+          });
+
+          conn.on('data', (msg) => {
+            if (msg.kind === 'pin-ok') {
+              setStatus('Connected — waiting for files...', 'connected');
+              startTime = Date.now();
+              return;
+            }
+            if (msg.kind === 'pin-fail') {
+              setStatus(
+                'Wrong PIN! Please reload and try again.',
+                'error-status',
+              );
+              return;
+            }
+            if (msg.kind === 'meta') {
+              createFileItem(msg.file);
+              receivingBuffers[msg.file.id] = { meta: msg.file, chunks: [] };
+              setStatus('Receiving files...', 'connected');
+              return;
+            }
+            if (msg.kind === 'chunk') {
+              const entry = receivingBuffers[msg.fileId];
+              if (!entry) return;
+              entry.chunks[msg.index] = msg.data;
+              const received = entry.chunks.filter(Boolean).length;
+              const pct = Math.round((received / entry.meta.totalChunks) * 100);
+              const transferred = Math.min(
+                received * CHUNK_SIZE,
+                entry.meta.size,
+              );
+              updateFileProgress(msg.fileId, pct, transferred, entry.meta.size);
+              return;
+            }
+            if (msg.kind === 'done') {
+              const entry = receivingBuffers[msg.fileId];
+              if (!entry) return;
+              const blob = new Blob(entry.chunks, {
+                type: entry.meta.type || 'application/octet-stream',
+              });
+              const url = URL.createObjectURL(blob);
+              receivedFiles.push({
+                id: entry.meta.id,
+                name: entry.meta.name,
+                size: entry.meta.size,
+                blob,
+                url,
+              });
+              delete receivingBuffers[msg.fileId];
+              markFileDone(msg.fileId, entry.meta.size);
+              // Auto-download
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = entry.meta.name;
+              a.click();
+              return;
+            }
+          });
+
+          conn.on('close', () => {
+            if (receivedFiles.length > 0) showSummary();
+            else setStatus('Connection closed.', 'error-status');
+          });
+
+          conn.on('error', (err) =>
+            setStatus('Error: ' + err.message, 'error-status'),
+          );
+        });
+
+        peer.on('error', (err) => {
+          if (err.type === 'unavailable-id') {
+            setStatus('Session ID conflict, retrying...', 'connecting');
+            setTimeout(() => {
+              peer.destroy();
+              connect();
+            }, 1000);
+            return;
+          }
+          setStatus('Error: ' + err.message, 'error-status');
+        });
+      }
+
+      btnConnect.addEventListener('click', connect);
+      digits[0].focus();
+    </script>
+  </body>
+</html>
