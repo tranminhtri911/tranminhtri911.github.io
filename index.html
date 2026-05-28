@@ -1363,14 +1363,27 @@
       async function waitForBufferDrain(conn) {
         const HIGH_WATER = 4 * 1024 * 1024; // 4 MB
         const dc = conn && conn.dataChannel;
-        if (!dc || dc.bufferedAmount <= HIGH_WATER) return;
+        if (!dc) return;
+        // Set threshold before reading amount to avoid missing the transition event
+        dc.bufferedAmountLowThreshold = HIGH_WATER;
+        if (dc.bufferedAmount <= HIGH_WATER) return;
         await new Promise((resolve) => {
-          dc.bufferedAmountLowThreshold = HIGH_WATER;
-          const onLow = () => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            clearInterval(poll);
             dc.removeEventListener('bufferedamountlow', onLow);
             resolve();
           };
+          const onLow = () => finish();
           dc.addEventListener('bufferedamountlow', onLow);
+          // Polling fallback: some mobile browsers (iOS Safari) don't fire reliably
+          const poll = setInterval(() => {
+            if (dc.bufferedAmount <= HIGH_WATER) finish();
+          }, 50);
+          // Safety timeout: prevent hanging if connection closes
+          setTimeout(finish, 10000);
         });
       }
 
